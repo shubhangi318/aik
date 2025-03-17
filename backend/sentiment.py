@@ -188,6 +188,7 @@ def categorize_sentiment_intensity(compound_score: float) -> str:
     else:
         return "extremely negative"
 
+# Make sure this function is properly defined in sentiment.py
 def compare_sentiments(articles: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     Perform comparative analysis across multiple articles.
@@ -201,22 +202,15 @@ def compare_sentiments(articles: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not articles:
         return {
             "average_sentiment": "N/A",
-            "sentiment_distribution": {},
-            "speculative_vs_confirmed": {},
-            "intensity_distribution": {},
             "charts": {}
         }
     
     # Extract sentiment data
     polarities = [article.get('polarity', 0) for article in articles]
     sentiments = [article.get('sentiment', 'neutral') for article in articles]
-    speculation_scores = [article.get('speculation_score', 0) for article in articles]
-    certainty_types = [article.get('certainty_type', 'unknown') for article in articles]
-    intensities = [article.get('intensity', 'neutral') for article in articles]
     
     # Calculate statistics
     avg_polarity = statistics.mean(polarities) if polarities else 0
-    avg_speculation = statistics.mean(speculation_scores) if speculation_scores else 0
     
     # Determine overall sentiment
     if avg_polarity > 0.1:
@@ -233,166 +227,27 @@ def compare_sentiments(articles: List[Dict[str, Any]]) -> Dict[str, Any]:
         "negative": sentiments.count("negative")
     }
     
-    # Count speculative vs. confirmed
-    certainty_count = {
-        "speculative": certainty_types.count("speculative"),
-        "confirmed": certainty_types.count("confirmed")
-    }
-    
-    # Count intensity distribution
-    intensity_count = {}
-    for intensity in intensities:
-        intensity_count[intensity] = intensity_count.get(intensity, 0) + 1
-    
-    # Generate charts
+    # Generate only the news categories bubble chart
     charts = {}
-    charts["sentiment_distribution"] = generate_sentiment_chart(sentiment_count)
-    charts["speculation_chart"] = generate_speculation_chart(certainty_count)
-    charts["intensity_chart"] = generate_intensity_chart(intensity_count)
-    charts["sentiment_timeline"] = generate_sentiment_timeline(articles)
+    charts["news_categories_chart"] = generate_news_categories_bubble_chart(articles)
     
     return {
         "average_sentiment": overall_sentiment,
         "average_polarity": avg_polarity,
-        "average_speculation": avg_speculation,
         "sentiment_distribution": sentiment_count,
-        "speculative_vs_confirmed": certainty_count,
-        "intensity_distribution": intensity_count,
         "charts": charts
     }
 
-def generate_sentiment_chart(sentiment_count: Dict[str, int]) -> str:
-    """
-    Generate a bar chart showing sentiment distribution.
-    
-    Args:
-        sentiment_count: Dictionary with sentiment counts
-        
-    Returns:
-        Base64 encoded image of the chart
-    """
-    labels = ['Positive', 'Neutral', 'Negative']
-    values = [sentiment_count['positive'], sentiment_count['neutral'], sentiment_count['negative']]
-    colors = ['#4CAF50', '#9E9E9E', '#F44336']
-    
-    plt.figure(figsize=(10, 6))
-    plt.bar(labels, values, color=colors)
-    plt.title('Sentiment Distribution Across Articles')
-    plt.xlabel('Sentiment')
-    plt.ylabel('Number of Articles')
-    
-    # Save chart as base64 string
-    buffer = BytesIO()
-    plt.savefig(buffer, format='png')
-    buffer.seek(0)
-    image_png = buffer.getvalue()
-    buffer.close()
-    plt.close()
-    
-    # Generate base64 string
-    chart_str = base64.b64encode(image_png).decode('utf-8')
-    
-    return chart_str
 
-def generate_speculation_chart(certainty_count: Dict[str, int]) -> str:
+def generate_news_categories_bubble_chart(articles: List[Dict[str, Any]]) -> str:
     """
-    Generate a pie chart showing speculative vs. confirmed distribution.
-    
-    Args:
-        certainty_count: Dictionary with certainty type counts
-        
-    Returns:
-        Base64 encoded image of the chart
-    """
-    labels = ['Confirmed', 'Speculative']
-    values = [certainty_count['confirmed'], certainty_count['speculative']]
-    colors = ['#2196F3', '#FF9800']
-    
-    plt.figure(figsize=(8, 8))
-    plt.pie(values, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
-    plt.title('Speculative vs. Confirmed Content')
-    plt.axis('equal')
-    
-    # Save chart as base64 string
-    buffer = BytesIO()
-    plt.savefig(buffer, format='png')
-    buffer.seek(0)
-    image_png = buffer.getvalue()
-    buffer.close()
-    plt.close()
-    
-    # Generate base64 string
-    chart_str = base64.b64encode(image_png).decode('utf-8')
-    
-    return chart_str
-
-def generate_intensity_chart(intensity_count: Dict[str, int]) -> str:
-    """
-    Generate a horizontal bar chart showing sentiment intensity distribution.
-    
-    Args:
-        intensity_count: Dictionary with intensity counts
-        
-    Returns:
-        Base64 encoded image of the chart
-    """
-    # Order intensities from most negative to most positive
-    ordered_intensities = [
-        "extremely negative", "very negative", "moderately negative", 
-        "slightly negative", "neutral", "slightly positive", 
-        "moderately positive", "very positive", "extremely positive"
-    ]
-    
-    # Filter only intensities that exist in the data
-    labels = [intensity for intensity in ordered_intensities if intensity in intensity_count]
-    values = [intensity_count.get(intensity, 0) for intensity in labels]
-    
-    # Generate color gradient from red to gray to green
-    colors = []
-    for intensity in labels:
-        if "negative" in intensity:
-            if "extremely" in intensity:
-                colors.append('#B71C1C')  # Dark red
-            elif "very" in intensity:
-                colors.append('#E53935')  # Red
-            elif "moderately" in intensity:
-                colors.append('#EF5350')  # Light red
-            else:
-                colors.append('#FFCDD2')  # Very light red
-        elif "neutral" in intensity:
-            colors.append('#9E9E9E')  # Gray
-        else:  # positive
-            if "extremely" in intensity:
-                colors.append('#1B5E20')  # Dark green
-            elif "very" in intensity:
-                colors.append('#43A047')  # Green
-            elif "moderately" in intensity:
-                colors.append('#66BB6A')  # Light green
-            else:
-                colors.append('#C8E6C9')  # Very light green
-    
-    plt.figure(figsize=(12, 8))
-    plt.barh(labels, values, color=colors)
-    plt.title('Sentiment Intensity Distribution')
-    plt.xlabel('Number of Articles')
-    plt.tight_layout()
-    
-    # Save chart as base64 string
-    buffer = BytesIO()
-    plt.savefig(buffer, format='png')
-    buffer.seek(0)
-    image_png = buffer.getvalue()
-    buffer.close()
-    plt.close()
-    
-    # Generate base64 string
-    chart_str = base64.b64encode(image_png).decode('utf-8')
-    
-    return chart_str
-
-def generate_sentiment_timeline(articles: List[Dict[str, Any]]) -> str:
-    """
-    Generate a timeline showing sentiment shifts across articles.
+    Generate a bubble chart categorizing articles into business-specific categories:
+    - Bullish News (Positive Growth)
+    - Bearish News (Negative Outlook)
+    - Mergers & Acquisitions
+    - Reputation Damage (Backlash News)
+    - Brand Love (Positive Perception)
+    - Government & Policy Framing
     
     Args:
         articles: List of article dictionaries with sentiment data
@@ -400,38 +255,152 @@ def generate_sentiment_timeline(articles: List[Dict[str, Any]]) -> str:
     Returns:
         Base64 encoded image of the chart
     """
-    # Extract data for timeline
-    article_indices = list(range(1, len(articles) + 1))
-    polarities = [article.get('polarity', 0) for article in articles]
+    if not articles:
+        return ""
     
-    # Create figure with two subplots
-    fig, ax = plt.subplots(figsize=(12, 6))
+    # Define the categories
+    categories = [
+        "Bullish News", 
+        "Bearish News", 
+        "Mergers & Acquisitions", 
+        "Reputation Damage", 
+        "Brand Love", 
+        "Government & Policy"
+    ]
     
-    # Plot sentiment polarity line
-    ax.plot(article_indices, polarities, 'o-', color='blue', linewidth=2)
-    ax.axhline(y=0, color='gray', linestyle='--', alpha=0.7)
+    # Keywords to help categorize articles
+    category_keywords = {
+        "Bullish News": ["growth", "profit", "revenue", "expansion", "success", "funding", "investment", 
+                         "increase", "record", "earnings", "exceed", "beat", "up", "rise", "soar", "gain"],
+        "Bearish News": ["loss", "decline", "scandal", "layoff", "bankruptcy", "plunge", "drop", "below", 
+                         "miss", "fall", "decrease", "struggle", "shrink", "poor", "down", "negative"],
+        "Mergers & Acquisitions": ["merger", "acquisition", "acquire", "buy", "purchase", "takeover", "partnership", 
+                                   "collaborate", "joint venture", "deal", "alliance", "stake"],
+        "Reputation Damage": ["controversy", "scandal", "backlash", "protest", "lawsuit", "toxic", "criticism", 
+                              "resign", "apologize", "accusation", "failure", "problem", "issue", "risk"],
+        "Brand Love": ["donate", "philanthropy", "award", "recognition", "customer satisfaction", "positive", 
+                       "approval", "sustainable", "impact", "community", "charity", "responsible"],
+        "Government & Policy": ["regulation", "compliance", "law", "policy", "government", "tax", "legal", 
+                               "official", "authorities", "regulator", "legislation", "ban", "approve"]
+    }
+    
+    # Initialize data structure to hold article data by category
+    category_data = {cat: [] for cat in categories}
+    
+    # Categorize each article
+    for i, article in enumerate(articles):
+        title = article.get('title', '').lower()
+        summary = article.get('summary', '').lower()
+        content = article.get('raw_content', '').lower()
+        
+        # Combine text for category matching
+        full_text = title + " " + summary
+        
+        # Get sentiment metrics for sizing/coloring
+        sentiment_score = article.get('vader_compound', 0)
+        
+        # Determine article size (by content length)
+        content_length = len(content)
+        
+        # Determine best matching category
+        best_category = None
+        max_matches = 0
+        
+        for category, keywords in category_keywords.items():
+            matches = sum(1 for keyword in keywords if keyword.lower() in full_text)
+            if matches > max_matches:
+                max_matches = matches
+                best_category = category
+        
+        # If no keywords matched, use sentiment to categorize
+        if max_matches == 0:
+            if sentiment_score >= 0.3:
+                best_category = "Bullish News"
+            elif sentiment_score <= -0.3:
+                best_category = "Bearish News"
+            else:
+                best_category = "Government & Policy"  # Default fallback
+        
+        # Add the article to the appropriate category
+        if best_category:
+            # Store article data: (article index, sentiment score, content length)
+            category_data[best_category].append((i+1, sentiment_score, content_length))
+    
+    # Prepare for plotting
+    plt.figure(figsize=(14, 10), facecolor='white')
+    plt.grid(True, color='#EEEEEE', linestyle='-', linewidth=0.5)
+    
+    # Colors for different categories
+    colors = {
+        "Bullish News": '#4CAF50',      # Green
+        "Bearish News": '#F44336',      # Red
+        "Mergers & Acquisitions": '#2196F3',  # Blue
+        "Reputation Damage": '#FF9800',  # Orange
+        "Brand Love": '#9C27B0',        # Purple
+        "Government & Policy": '#607D8B'  # Gray
+    }
+    
+    # Create bubble chart
+    for y, category in enumerate(categories):
+        for article_data in category_data[category]:
+            article_id, sentiment_score, content_length = article_data
+            
+            # Use sentiment score for x-position (normalized to 0-1 scale)
+            x_pos = (sentiment_score + 1) / 2  # Convert -1 to 1 scale to 0 to 1
+            
+            # Size based on content length, with minimum to ensure visibility
+            size = 1000 + (content_length / 100)
+            
+            # Plot the bubble
+            plt.scatter(
+                x_pos, 
+                y, 
+                s=size, 
+                color=colors[category], 
+                alpha=0.7,
+                edgecolors='white'
+            )
+            
+            # Add article number label
+            plt.annotate(
+                str(article_id),
+                (x_pos, y),
+                ha='center',
+                va='center',
+                color='white',
+                fontweight='bold'
+            )
     
     # Add labels and title
-    ax.set_xlabel('Article Number')
-    ax.set_ylabel('Sentiment Polarity (-1 to +1)')
-    ax.set_title('Sentiment Shifts Across Articles')
+    plt.title('Article Sentiment Comparison by Category', fontsize=18)
+    plt.xlabel('Sentiment Score (Negative to Positive)', fontsize=12)
+    plt.yticks(range(len(categories)), categories, fontsize=12)
     
-    # Add annotation for positive/negative regions
-    ax.fill_between(article_indices, polarities, 0, where=[p > 0 for p in polarities], 
-                   color='green', alpha=0.3, label='Positive')
-    ax.fill_between(article_indices, polarities, 0, where=[p < 0 for p in polarities], 
-                   color='red', alpha=0.3, label='Negative')
+    # Add category descriptions in a legend box
+    category_desc = {
+        "Bullish News": "Expansion, profits, funding, acquisitions",
+        "Bearish News": "Losses, scandals, layoffs, bankruptcies",
+        "Mergers & Acquisitions": "Partnerships or buyouts",
+        "Reputation Damage": "Controversies, PR disasters, scandals",
+        "Brand Love": "Goodwill, customer satisfaction, philanthropy",
+        "Government & Policy": "Political influence, regulatory perspectives"
+    }
     
-    ax.set_xticks(article_indices)
-    ax.grid(True, alpha=0.3)
-    ax.legend()
+    # Create a custom legend
+    legend_elements = []
+    for cat, color in colors.items():
+        legend_elements.append(plt.Line2D([0], [0], marker='o', color='w', 
+                              markerfacecolor=color, markersize=10, 
+                              label=f"{cat}: {category_desc[cat]}"))
     
-    # Adjust layout
+    plt.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, -0.1),
+              fancybox=True, shadow=True, ncol=2, fontsize=10)
+    
     plt.tight_layout()
     
     # Save chart as base64 string
     buffer = BytesIO()
-    plt.savefig(buffer, format='png')
+    plt.savefig(buffer, format='png', bbox_inches='tight')
     buffer.seek(0)
     image_png = buffer.getvalue()
     buffer.close()
