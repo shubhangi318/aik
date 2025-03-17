@@ -72,32 +72,37 @@ def extract_company_news(company_name: str, num_articles: int = 10) -> List[Dict
                     # Extract article content
                     article_data = extract_article_content(i, url, headers)
                     
-                    if article_data and article_data.get('content'):
-                        metadata = generate_article_metadata(article_data['content'], company_name)
+                    # Check if article_data is empty (which means access was denied or another error)
+                    if not article_data or not article_data.get('content'):
+                        print(f"No content retrieved for {url}, skipping to next article.")
+                        continue
                         
-                        # Combine all data
-                        article_info = {
-                            'url': url,
-                            'raw_content': article_data.get('content', 'No content available'),
-                            'title': metadata.get('title', article_data.get('title', 'No title available')),
-                            'summary': metadata.get('summary', 'No summary available'),
-                            'source': article_data.get('source', 'Unknown'),
-                            'date': article_data.get('date', 'Unknown'),
-                            'keywords': metadata.get('keywords', []),
-                            'relevance': metadata.get('relevance', 'Unknown'),
-                        }
-                        
-                        # Add to list if not already present (check by URL)
-                        if not any(article['url'] == url for article in news_articles):
-                            news_articles.append(article_info)
-                            print(f"Extracted article {len(news_articles)}/{num_articles}: {article_info['title']}")
+                    # Generate metadata
+                    metadata = generate_article_metadata(article_data['content'], company_name)
+                    
+                    # Combine all data
+                    article_info = {
+                        'url': url,
+                        'raw_content': article_data.get('content', 'No content available'),
+                        'title': metadata.get('title', article_data.get('title', 'No title available')),
+                        'summary': metadata.get('summary', 'No summary available'),
+                        'source': article_data.get('source', 'Unknown'),
+                        'date': article_data.get('date', 'Unknown'),
+                        'keywords': metadata.get('keywords', []),
+                        'relevance': metadata.get('relevance', 'Unknown'),
+                    }
+                    
+                    # Add to list if not already present (check by URL)
+                    if not any(article['url'] == url for article in news_articles):
+                        news_articles.append(article_info)
+                        print(f"Extracted article {len(news_articles)}/{num_articles}: {article_info['title']}")
                     
                     # Add a small delay to be respectful to servers
                     time.sleep(random.uniform(1.0, 2.0))
                     
                 except Exception as e:
                     print(f"Error processing article: {e}")
-                    continue
+                    continue  # Continue to the next article on any error
     
     except Exception as e:
         print(f"Error during news extraction: {e}")
@@ -105,7 +110,6 @@ def extract_company_news(company_name: str, num_articles: int = 10) -> List[Dict
     # Modify the final return statement to include display_news functionality
     combined_article_info = display_news(news_articles)
     return combined_article_info
-    
         
 def extract_article_content(i, url: str, headers: Dict[str, str]) -> Dict[str, Any]:
     """
@@ -116,7 +120,7 @@ def extract_article_content(i, url: str, headers: Dict[str, str]) -> Dict[str, A
         headers: HTTP headers for the request
         
     Returns:
-        Dictionary with article content and metadata
+        Dictionary with article content and metadata or empty dict if access denied
     """
     try:
         # Enhance headers to appear more like a legitimate browser
@@ -154,6 +158,8 @@ def extract_article_content(i, url: str, headers: Dict[str, str]) -> Dict[str, A
         
         # Add a longer timeout and retry mechanism
         max_retries = 3
+        access_granted = False
+        
         for attempt in range(max_retries):
             try:
                 # Increase timeout and add a randomized delay between attempts
@@ -161,10 +167,15 @@ def extract_article_content(i, url: str, headers: Dict[str, str]) -> Dict[str, A
                 
                 # Check if we got a successful response
                 if response.status_code == 200:
+                    access_granted = True
                     break
                 elif response.status_code == 403:
                     print(f"Access forbidden for {url}, attempt {attempt+1}/{max_retries}")
-                    time.sleep(random.uniform(2.0, 5.0))
+                    if attempt < max_retries - 1:
+                        time.sleep(random.uniform(2.0, 5.0))
+                    else:
+                        print(f"Max retries reached for {url}. Skipping this article.")
+                        return {}  # Return empty dict to signal skipping this article
                 else:
                     response.raise_for_status()
             except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
@@ -173,7 +184,12 @@ def extract_article_content(i, url: str, headers: Dict[str, str]) -> Dict[str, A
                     print(f"Request failed, retrying in {wait_time:.1f} seconds... ({attempt+1}/{max_retries})")
                     time.sleep(wait_time)
                 else:
-                    raise
+                    print(f"Failed to access {url} after {max_retries} attempts. Error: {str(e)}")
+                    return {}  # Return empty dict to signal skipping this article
+        
+        # If we didn't get access after all retries, return empty dict
+        if not access_granted:
+            return {}
         
         # Parse HTML content
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -238,14 +254,19 @@ def extract_article_content(i, url: str, headers: Dict[str, str]) -> Dict[str, A
         # Clean up content
         content = re.sub(r'\s+', ' ', content).strip()
 
-        with open(f'output/article_{i}.json', 'w') as file:
-            json.dump({
-                'url': url,
-                'title': title,
-                'source': source,
-                'date': date,
-                'content': content
-            }, file)
+        try:
+            # Only write to file if content was successfully extracted
+            if content:
+                with open(f'output/article_{i}.json', 'w') as file:
+                    json.dump({
+                        'url': url,
+                        'title': title,
+                        'source': source,
+                        'date': date,
+                        'content': content
+                    }, file)
+        except Exception as file_error:
+            print(f"Error writing article to file: {file_error}")
         
         return {
             'url': str(url),
@@ -257,7 +278,7 @@ def extract_article_content(i, url: str, headers: Dict[str, str]) -> Dict[str, A
     
     except Exception as e:
         print(f"Error extracting content from {url}: {e}")
-        return {}
+        return {}  # Return empty dict on any error
             
 
 def generate_article_metadata(article_content: str, company_name: str) -> Dict[str, Any]:
@@ -274,9 +295,6 @@ def generate_article_metadata(article_content: str, company_name: str) -> Dict[s
     try:
         
         openai.api_key = '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'
-        # if not openai.api_key:
-        #     print("Warning: OPENAI_API_KEY not found")
-        #     return {}
         
         # Truncate content if too long (OpenAI has token limits)
         max_content_length = 4000  # Adjust based on your OpenAI model
@@ -373,4 +391,3 @@ def display_news(news_articles: List[Dict[str, Any]]) -> None:
         combined.append(combined_info)
 
     return combined
-
